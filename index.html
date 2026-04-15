@@ -21,7 +21,6 @@
       background-color: #0f172a; 
       color: #f8fafc;
       margin: 0; padding: 0;
-      /* 모바일 브라우저 툴바 대응을 위한 높이 설정 */
       height: 100vh;
       height: 100dvh;
       overflow: hidden;
@@ -61,7 +60,6 @@
     .hide-scroll::-webkit-scrollbar { display: none; }
     .card-shadow { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4); }
     
-    /* 안전 영역 대응 (아이폰 노치 등) */
     .pb-safe {
       padding-bottom: env(safe-area-inset-bottom);
     }
@@ -126,10 +124,19 @@
         try {
           const issues = await fetchGitHubAPI("/issues?state=open&per_page=50&sort=created&direction=asc");
           
+          // 내 로컬 좋아요 목록 가져오기 (되돌아감 방지)
+          const localLikes = JSON.parse(localStorage.getItem('my_liked_posts') || '[]');
+
           setComments(prev => {
             return issues.map((issue) => {
-              const likesCount = issue.reactions ? issue.reactions.heart : 0;
-              const existing = prev.find(p => p.id === issue.number.toString());
+              const issueId = issue.number.toString();
+              let likesCount = issue.reactions ? issue.reactions.heart : 0;
+              const existing = prev.find(p => p.id === issueId);
+              
+              // [보정 로직] 내가 이미 좋아요를 눌렀는데 API 응답값이 아직 예전 값인 경우
+              if (localLikes.includes(issueId) && likesCount === 0) {
+                likesCount = 1; // 최소 1로 고정하여 되돌아가는 현상 방지
+              }
               
               if (existing && likesCount > existing.likes) {
                  setLikedId(existing.id);
@@ -137,11 +144,11 @@
               }
 
               return {
-                id: issue.number.toString(),
+                id: issueId,
                 nickname: issue.title || "익명",
                 content: issue.body || "",
                 likes: likesCount,
-                likedBy: existing ? existing.likedBy : [],
+                likedBy: localLikes.includes(issueId) ? [userId] : [],
                 style: {
                   colorIndex: issue.number % 5,
                 }
@@ -149,7 +156,7 @@
             });
           });
         } catch (error) { console.error(error); }
-      }, []);
+      }, [userId]);
 
       useEffect(() => {
         loadComments();
@@ -168,10 +175,14 @@
       };
 
       const toggleLike = async (id) => {
-        const target = comments.find(c => c.id === id);
-        if(!target || (target.likedBy && target.likedBy.includes(userId))) return;
+        const localLikes = JSON.parse(localStorage.getItem('my_liked_posts') || '[]');
+        if(localLikes.includes(id)) return; // 이미 누름
         
-        setComments(prev => prev.map(c => c.id === id ? { ...c, likes: c.likes + 1, likedBy: [...(c.likedBy || []), userId] } : c));
+        // 로컬 저장소에 먼저 기록 (낙관적 업데이트)
+        const updatedLikes = [...localLikes, id];
+        localStorage.setItem('my_liked_posts', JSON.stringify(updatedLikes));
+
+        setComments(prev => prev.map(c => c.id === id ? { ...c, likes: c.likes + 1, likedBy: [userId] } : c));
         setLikedId(id);
         setTimeout(() => setLikedId(null), 1000);
 
@@ -188,7 +199,6 @@
 
       return (
         <div className="flex flex-col h-full w-full select-none relative bg-slate-950 overflow-hidden" style={{ height: '100dvh' }}>
-          {/* 전송 성공 알림 */}
           {showToast && (
             <div className="fixed top-0 left-1/2 z-[600] animate-toast">
               <div className="bg-emerald-600 text-white px-8 py-3 rounded-full shadow-2xl font-bold flex items-center gap-3 border-2 border-emerald-300/50 whitespace-nowrap">
@@ -278,13 +288,12 @@
       
       const [heartDrops, setHeartDrops] = useState([]);
 
-      // 좋아요 발생 시 하트 떨어지는 효과 데이터 생성
       useEffect(() => {
         if (likedId && !isMobileScreen) {
-          const newDrops = Array.from({ length: 8 }).map((_, i) => ({
+          const newDrops = Array.from({ length: 12 }).map((_, i) => ({
             id: Date.now() + i,
-            left: Math.random() * 80 + 10, // 카드 영역 내 무작위 가로위치
-            delay: Math.random() * 0.5
+            left: Math.random() * 80 + 10,
+            delay: Math.random() * 0.4
           }));
           setHeartDrops(prev => [...prev, ...newDrops]);
           setTimeout(() => {
@@ -296,7 +305,6 @@
       if (isMobileScreen) {
         return (
           <div className="h-full flex flex-col w-full bg-slate-100">
-            {/* 상단 헤더 슬림화: 로고(좌), 타이틀(우) 배치 */}
             <div className="bg-emerald-600 p-3 px-5 shadow-lg flex flex-row justify-between items-center shrink-0">
               <img src="logo.png" className="h-6 object-contain brightness-0 invert" alt="logo" />
               <h2 className="font-black text-white tracking-widest uppercase text-[10px]">Opinion List</h2>
@@ -321,38 +329,38 @@
 
       return (
         <div className="h-full bg-slate-900 overflow-hidden relative flex flex-col w-full">
-          {/* 상단 헤더: 로고를 큼직하게 배치 */}
-          <div className="p-8 z-20 border-b border-slate-800 bg-slate-900/95 backdrop-blur-2xl flex justify-between items-center shrink-0 shadow-2xl">
-            <div className="flex items-center gap-12">
-              <img src="logo.png" alt="PharmaResearch" className="h-20 w-auto object-contain" />
-              <div className="h-12 w-[2px] bg-slate-700/50 rounded-full"></div>
+          {/* PC 헤더 슬림화: 로고 크기와 패딩 최적화 */}
+          <div className="p-4 px-10 z-20 border-b border-slate-800 bg-slate-900/95 backdrop-blur-2xl flex justify-between items-center shrink-0 shadow-2xl">
+            <div className="flex items-center gap-10">
+              <img src="logo.png" alt="PharmaResearch" className="h-14 w-auto object-contain" />
+              <div className="h-10 w-[2px] bg-slate-700/50 rounded-full"></div>
               <div>
-                <h1 className="text-emerald-400 font-black text-3xl tracking-[0.1em] uppercase leading-none mb-1">Workshop Live Wall</h1>
-                <span className="text-slate-500 font-bold text-xs uppercase tracking-[0.4em] opacity-80 italic">Real-time Feedback Board</span>
+                <h1 className="text-emerald-400 font-black text-2xl tracking-[0.1em] uppercase leading-none mb-1">Live Board</h1>
+                <span className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.4em] opacity-80">PharmaResearch Workshop</span>
               </div>
             </div>
-            <div className="flex items-center gap-4 bg-slate-800/80 px-8 py-4 rounded-full border border-slate-700">
-               <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_15px_#10b981]"></div>
-               <span className="text-slate-200 text-base font-black uppercase tracking-widest">{comments.length} Messages</span>
+            <div className="flex items-center gap-4 bg-slate-800/80 px-6 py-2 rounded-full border border-slate-700">
+               <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_#10b981]"></div>
+               <span className="text-slate-200 text-sm font-black uppercase tracking-widest">{comments.length} Messages</span>
             </div>
           </div>
 
-          {/* 메인 보드: CSS Grid 시스템으로 절대 겹침 방지 */}
           <div className="flex-1 overflow-y-auto p-10 bg-[radial-gradient(circle_at_center,_#1e293b_0%,_#0f172a_100%)] scroll-smooth">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10 auto-rows-max">
               {comments.map((c) => {
                 const style = c.style || { colorIndex: 0 };
-                const isLiked = likedId === c.id;
-                const hasLiked = c.likedBy && c.likedBy.includes(userId);
+                const isThisPostLiked = likedId === c.id;
+                const hasMeLiked = c.likedBy && c.likedBy.includes(userId);
 
                 return (
                   <div 
                     key={c.id} 
                     onDoubleClick={() => toggleLike(c.id)} 
-                    className={`relative animate-card card-shadow p-8 rounded-[2.5rem] flex flex-col justify-between ${colors[style.colorIndex]} transition-all cursor-pointer border border-white/5 min-h-[220px]`}
+                    className="relative animate-card card-shadow p-8 rounded-[2.5rem] flex flex-col justify-between bg-white border-t-[10px] transition-all cursor-pointer border border-white/5 min-h-[220px]"
+                    style={{ borderTopColor: colors[style.colorIndex].split('-').pop() === '500' ? '#10b981' : '#14b8a6' }}
                   >
-                    {/* 하트비 이펙트 렌더링 */}
-                    {isLiked && heartDrops.map(drop => (
+                    {/* 하트비 이펙트: 깜빡임 없이 하트만 떨어짐 */}
+                    {isThisPostLiked && heartDrops.map(drop => (
                       <div 
                         key={drop.id} 
                         className="falling-heart"
@@ -367,8 +375,8 @@
                     <div className="flex justify-between items-center pt-5 border-t-2 border-slate-100 mt-auto">
                       <span className="font-black text-[11px] text-slate-500 truncate bg-slate-50 px-3 py-1.5 rounded-full max-w-[120px] border border-slate-100 uppercase tracking-widest">@ {c.nickname}</span>
                       <button onClick={(e) => { e.stopPropagation(); toggleLike(c.id); }} 
-                        className={`flex items-center gap-2 hover:scale-110 px-5 py-2.5 rounded-full text-base font-black transition-all shadow-md ${hasLiked ? 'bg-emerald-500 text-white shadow-emerald-500/40' : 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100'}`}>
-                        {hasLiked ? '💚' : '🤍'} <span>{c.likes}</span>
+                        className={`flex items-center gap-2 hover:scale-110 px-5 py-2 rounded-full text-base font-black transition-all shadow-md ${hasMeLiked ? 'bg-emerald-500 text-white shadow-emerald-500/40' : 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100'}`}>
+                        {hasMeLiked ? '💚' : '🤍'} <span>{c.likes}</span>
                       </button>
                     </div>
                   </div>
