@@ -21,20 +21,19 @@
       background-color: #0f172a; 
       color: #f8fafc;
       margin: 0; padding: 0;
-      overflow: hidden;
     }
     
     /* 카드 등장 애니메이션 */
     @keyframes cardEntrance {
-      0% { transform: scale(0.6) translateY(100px); opacity: 0; }
-      100% { transform: scale(1) translateY(0) rotate(var(--rotation)); opacity: 1; }
+      0% { transform: scale(0.9) translateY(20px); opacity: 0; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
     }
     
     /* 좋아요 클릭 임팩트 */
     @keyframes heartPunch {
-      0% { transform: scale(1) rotate(var(--rotation)); }
-      50% { transform: scale(1.25) rotate(calc(var(--rotation) * 2.5)); filter: brightness(1.3); }
-      100% { transform: scale(1) rotate(var(--rotation)); }
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); filter: brightness(1.2); }
+      100% { transform: scale(1); }
     }
 
     /* 하트 파티클 애니메이션 */
@@ -46,28 +45,28 @@
     /* 토스트 알림 */
     @keyframes toastSlide {
       0% { transform: translate(-50%, -120%); opacity: 0; }
-      15%, 85% { transform: translate(-50%, 30px); opacity: 1; }
+      15%, 85% { transform: translate(-50%, 20px); opacity: 1; }
       100% { transform: translate(-50%, -120%); opacity: 0; }
     }
     
-    .animate-card { animation: cardEntrance 0.7s cubic-bezier(0.23, 1, 0.32, 1) forwards; }
-    .animate-punch { animation: heartPunch 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-    .animate-toast { animation: toastSlide 3.5s ease-in-out forwards; }
+    .animate-card { animation: cardEntrance 0.5s ease-out forwards; }
+    .animate-punch { animation: heartPunch 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .animate-toast { animation: toastSlide 3s ease-in-out forwards; }
     
     .heart-particle {
       position: absolute;
       pointer-events: none;
-      animation: heartBurst 1.2s ease-out forwards;
+      animation: heartBurst 1s ease-out forwards;
       z-index: 100;
-      font-size: 28px;
+      font-size: 24px;
     }
 
     .hide-scroll::-webkit-scrollbar { display: none; }
-    .card-shadow { box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.6); }
+    .card-shadow { box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3); }
   </style>
 </head>
-<body class="h-screen w-screen overflow-hidden">
-  <div id="root" class="h-full w-full"></div>
+<body class="h-screen w-screen overflow-hidden flex flex-col">
+  <div id="root" class="h-full w-full flex flex-col"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
@@ -120,41 +119,6 @@
         return () => window.removeEventListener('resize', handleResize);
       }, []);
 
-      // ---------------------------------------------------------
-      // 그리드 슬롯 시스템 (절대 겹침 및 치우침 방지 전문 로직)
-      // ---------------------------------------------------------
-      const assignGridSlot = (id, existingItems) => {
-        const storageKey = `slot_${GITHUB_REPO}_${id}`;
-        const savedSlot = localStorage.getItem(storageKey);
-        if (savedSlot) return parseInt(savedSlot, 10);
-
-        // 5열 3행 그리드 (총 15개 슬롯, 빔프로젝터 표준 비율)
-        const cols = 5;
-        const rows = 3;
-        const totalSlots = cols * rows;
-        
-        const occupiedSlots = existingItems
-          .map(item => item.slotIndex)
-          .filter(s => s !== undefined);
-
-        let availableSlots = [];
-        for (let i = 0; i < totalSlots; i++) {
-          if (!occupiedSlots.includes(i)) availableSlots.push(i);
-        }
-
-        let chosenSlot;
-        if (availableSlots.length > 0) {
-          // 비어있는 슬롯 중 무작위 선택
-          chosenSlot = availableSlots[Math.floor(Math.random() * availableSlots.length)];
-        } else {
-          // 슬롯이 가득 찼을 때만 겹침 허용
-          chosenSlot = Math.floor(Math.random() * totalSlots);
-        }
-
-        localStorage.setItem(storageKey, chosenSlot.toString());
-        return chosenSlot;
-      };
-
       const loadComments = useCallback(async () => {
         if(!GITHUB_TOKEN || GITHUB_TOKEN.includes("YOUR_TOKEN")) return;
         try {
@@ -167,34 +131,19 @@
               
               if (existing && likesCount > existing.likes) {
                  setLikedId(existing.id);
-                 setTimeout(() => setLikedId(null), 1000);
+                 setTimeout(() => setLikedId(null), 800);
               }
 
-              if (existing) {
-                return { ...existing, likes: likesCount };
-              } else {
-                const slot = assignGridSlot(issue.number, prev);
-                const col = slot % 5;
-                const row = Math.floor(slot / 5);
-
-                // 화면 전체를 균등하게 사용하는 좌표 계산 (치우침 방지)
-                const left = 3 + (col * 19.5); // 좌우 여백 및 간격
-                const top = 18 + (row * 26);  // 상단 로고 영역 고려한 간격
-
-                return {
-                  id: issue.number.toString(),
-                  nickname: issue.title || "익명",
-                  content: issue.body || "",
-                  likes: likesCount,
-                  likedBy: [],
-                  slotIndex: slot,
-                  style: {
-                    rotation: (Math.random() * 6 - 3), // 아주 미세한 회전
-                    colorIndex: issue.number % 5,
-                    left, top
-                  }
-                };
-              }
+              return {
+                id: issue.number.toString(),
+                nickname: issue.title || "익명",
+                content: issue.body || "",
+                likes: likesCount,
+                likedBy: existing ? existing.likedBy : [],
+                style: {
+                  colorIndex: issue.number % 5,
+                }
+              };
             });
           });
         } catch (error) { console.error(error); }
@@ -211,9 +160,9 @@
         try {
           await fetchGitHubAPI("/issues", "POST", { title: nickname || "익명", body: content });
           setShowToast(true);
-          setTimeout(() => setShowToast(false), 3500);
+          setTimeout(() => setShowToast(false), 3100);
           loadComments();
-        } catch(e) { alert("전송에 실패했습니다."); }
+        } catch(e) { alert("전송 실패"); }
       };
 
       const toggleLike = async (id) => {
@@ -222,7 +171,7 @@
         
         setComments(prev => prev.map(c => c.id === id ? { ...c, likes: c.likes + 1, likedBy: [...(c.likedBy || []), userId] } : c));
         setLikedId(id);
-        setTimeout(() => setLikedId(null), 1000);
+        setTimeout(() => setLikedId(null), 800);
 
         if(!id.startsWith("temp_")) {
           try {
@@ -236,13 +185,12 @@
       };
 
       return (
-        <div className="flex flex-col h-full w-full select-none relative bg-slate-950 overflow-hidden">
-          {/* 전송 성공 알림 피드백 */}
+        <div className="flex flex-col h-screen w-screen select-none relative bg-slate-950 overflow-hidden">
+          {/* 토스트 피드백 */}
           {showToast && (
             <div className="fixed top-0 left-1/2 z-[600] animate-toast">
-              <div className="bg-emerald-600 text-white px-10 py-5 rounded-[2rem] shadow-2xl font-black flex flex-col items-center gap-1 border-2 border-emerald-400">
-                <span className="text-2xl">의견 등록 완료! 🚀</span>
-                <span className="text-xs font-medium opacity-80 uppercase tracking-widest">Sent to live wall successfully</span>
+              <div className="bg-emerald-500 text-white px-8 py-3 rounded-full shadow-2xl font-bold flex items-center gap-3 border-2 border-emerald-300/50">
+                <span>의견 등록 완료! 곧 화면에 나타납니다.</span>
               </div>
             </div>
           )}
@@ -251,7 +199,7 @@
             {activeTab === 'mobile' && <MobileView addComment={addComment} />}
             {activeTab === 'screen' && <ScreenView comments={comments} toggleLike={toggleLike} isMobileScreen={isMobileScreen} userId={userId} likedId={likedId} />}
             {activeTab === 'admin' && <AdminView clearComments={() => {
-              if(confirm("모든 데이터를 초기화하시겠습니까?")) {
+              if(confirm("데이터를 초기화하시겠습니까?")) {
                 setComments([]);
                 localStorage.clear();
                 fetchGitHubAPI("/issues?state=open").then(issues => {
@@ -261,18 +209,18 @@
             }} />}
           </div>
 
-          <div className="bg-[#0f172a] flex justify-around p-3 pb-8 z-50 border-t border-slate-800 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-            <button onClick={() => setActiveTab('mobile')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 transition-all ${activeTab === 'mobile' ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-600'}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-              <span className="text-[10px] font-black uppercase tracking-tighter">의견 등록</span>
+          <div className="bg-[#0f172a] flex justify-around p-2 pb-6 z-50 border-t border-slate-800 shrink-0">
+            <button onClick={() => setActiveTab('mobile')} className={`flex flex-col items-center p-2 rounded-xl flex-1 transition-all ${activeTab === 'mobile' ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              <span className="text-[10px] font-bold">의견 등록</span>
             </button>
-            <button onClick={() => setActiveTab('screen')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 transition-all ${activeTab === 'screen' ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-600'}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-              <span className="text-[10px] font-black uppercase tracking-tighter">라이브 보드</span>
+            <button onClick={() => setActiveTab('screen')} className={`flex flex-col items-center p-2 rounded-xl flex-1 transition-all ${activeTab === 'screen' ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+              <span className="text-[10px] font-bold">라이브 보드</span>
             </button>
-            <button onClick={() => setActiveTab('admin')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 transition-all ${activeTab === 'admin' ? 'text-slate-200 bg-slate-700' : 'text-slate-700'}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-              <span className="text-[10px] font-black uppercase tracking-tighter">Admin</span>
+            <button onClick={() => setActiveTab('admin')} className={`flex flex-col items-center p-2 rounded-xl flex-1 transition-all ${activeTab === 'admin' ? 'text-slate-200 bg-slate-700' : 'text-slate-600'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              <span className="text-[10px] font-bold">관리자</span>
             </button>
           </div>
         </div>
@@ -293,26 +241,23 @@
         });
       };
       return (
-        <div className="h-full w-full flex flex-col items-center justify-start p-6 bg-slate-50 overflow-y-auto">
-          <div className="w-full max-w-md bg-white p-10 rounded-[3.5rem] shadow-2xl border border-slate-200 mt-4">
-            <div className="text-center mb-12">
-              <img src="logo.png" className="h-8 mx-auto mb-6 object-contain" alt="logo" />
-              <h2 className="text-3xl font-black text-slate-800 mb-2 tracking-tighter">의견 남기기</h2>
-              <p className="text-sm text-slate-400 font-medium">실시간 전광판에 즉시 노출됩니다.</p>
+        <div className="h-full w-full flex flex-col items-center justify-start p-4 bg-slate-50 overflow-y-auto">
+          <div className="w-full max-w-md bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-200 mt-2">
+            <div className="text-center mb-6">
+              <img src="PharmaResearch-CI3.png" className="h-10 mx-auto mb-4 object-contain" alt="logo" />
+              <h2 className="text-xl font-black text-slate-800 tracking-tighter">워크샵 의견 등록</h2>
             </div>
-            <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-              <div className="space-y-3">
-                <label className="text-xs font-black text-emerald-600 uppercase tracking-[0.2em] ml-1">작성자</label>
-                <input type="text" placeholder="익명" value={nickname} onChange={e=>setNickname(e.target.value)} 
-                  className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-emerald-500 transition-all text-base text-slate-900 font-bold" maxLength={10} />
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">작성자</label>
+                <input type="text" placeholder="익명" value={nickname} onChange={e=>setNickname(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 transition-all text-base text-slate-900 font-bold" maxLength={10} />
               </div>
-              <div className="space-y-3">
-                <label className="text-xs font-black text-emerald-600 uppercase tracking-[0.2em] ml-1">내용</label>
-                <textarea placeholder="함께 나눌 이야기를 입력하세요." value={content} onChange={e=>setContent(e.target.value)} 
-                  className="w-full p-5 h-52 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-emerald-500 transition-all text-base text-slate-900 font-bold leading-relaxed resize-none" required />
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">내용</label>
+                <textarea placeholder="의견을 입력해 주세요." value={content} onChange={e=>setContent(e.target.value)} className="w-full p-3 h-28 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 transition-all text-base text-slate-900 font-bold leading-relaxed resize-none" required />
               </div>
-              <button type="submit" disabled={isSubmitting || !content.trim()} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black p-6 rounded-3xl active:scale-95 transition-all disabled:bg-slate-200 shadow-2xl shadow-emerald-500/30 mt-4 text-xl">
-                {isSubmitting ? '보내는 중...' : '보드에 등록'}
+              <button type="submit" disabled={isSubmitting || !content.trim()} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black p-4 rounded-2xl active:scale-95 transition-all disabled:bg-slate-200 shadow-lg mt-2 text-base">
+                {isSubmitting ? '보내는 중...' : '전광판 등록하기'}
               </button>
             </form>
           </div>
@@ -322,28 +267,28 @@
 
     function ScreenView({ comments, toggleLike, isMobileScreen, userId, likedId }) {
       const colors = [
-        'bg-white border-t-[12px] border-t-emerald-500',
-        'bg-white border-t-[12px] border-t-teal-500',
-        'bg-white border-t-[12px] border-t-emerald-400',
-        'bg-slate-50 border-t-[12px] border-t-teal-400',
-        'bg-white border-t-[12px] border-t-blue-500'
+        'bg-white border-t-[10px] border-t-emerald-500',
+        'bg-white border-t-[10px] border-t-teal-500',
+        'bg-white border-t-[10px] border-t-emerald-400',
+        'bg-slate-50 border-t-[10px] border-t-teal-400',
+        'bg-white border-t-[10px] border-t-blue-500'
       ];
       
       if (isMobileScreen) {
         return (
           <div className="h-full flex flex-col w-full bg-slate-100">
-            <div className="bg-emerald-600 p-6 shadow-xl text-center flex flex-col items-center">
-              <img src="logo.png" className="h-8 mb-2 brightness-0 invert" alt="logo" />
-              <h2 className="font-black text-white tracking-widest uppercase text-xs">Live Opinion Feed</h2>
+            <div className="bg-emerald-600 p-4 shadow-lg text-center flex flex-col items-center shrink-0">
+              <img src="PharmaResearch-CI3.png" className="h-8 mb-1 brightness-0 invert" alt="logo" />
+              <h2 className="font-black text-white tracking-widest uppercase text-[10px]">Opinion List</h2>
             </div>
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {comments.map(c => (
-                <div key={c.id} className="bg-white p-8 rounded-[3rem] shadow-md border border-slate-200" onDoubleClick={() => toggleLike(c.id)}>
-                  <span className="font-black text-[10px] text-emerald-600 bg-emerald-50 px-4 py-2 rounded-full mb-5 inline-block tracking-widest uppercase">@ {c.nickname}</span>
-                  <p className="text-slate-900 font-bold leading-relaxed mb-8 text-xl whitespace-pre-wrap">{c.content}</p>
-                  <div className="flex justify-between items-center border-t-2 border-slate-50 pt-6">
-                    <span className="text-[10px] text-slate-300 font-black uppercase tracking-widest italic">Double tap</span>
-                    <button onClick={(e) => { e.stopPropagation(); toggleLike(c.id); }} className={`flex items-center gap-3 px-8 py-4 rounded-full text-lg font-black transition-all ${c.likedBy && c.likedBy.includes(userId) ? 'bg-emerald-500 text-white shadow-xl' : 'bg-slate-50 text-slate-400'}`}>
+                <div key={c.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200" onDoubleClick={() => toggleLike(c.id)}>
+                  <span className="font-black text-[10px] text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full mb-3 inline-block">@ {c.nickname}</span>
+                  <p className="text-slate-900 font-bold leading-relaxed mb-4 text-lg whitespace-pre-wrap">{c.content}</p>
+                  <div className="flex justify-between items-center border-t border-slate-50 pt-4">
+                    <span className="text-[10px] text-slate-300 font-black uppercase italic">Double tap</span>
+                    <button onClick={(e) => { e.stopPropagation(); toggleLike(c.id); }} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-base font-black transition-all ${c.likedBy && c.likedBy.includes(userId) ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
                       {c.likedBy && c.likedBy.includes(userId) ? '💚' : '🤍'} {c.likes}
                     </button>
                   </div>
@@ -358,68 +303,53 @@
         <div className="h-full bg-slate-900 overflow-hidden relative flex flex-col w-full">
           <div id="particles-layer" className="absolute inset-0 pointer-events-none z-[100]"></div>
 
-          <div className="p-10 z-20 border-b border-slate-800 bg-slate-900/95 backdrop-blur-2xl flex justify-between items-center shadow-2xl">
-            <div className="flex items-center gap-12">
-              <img src="logo.png" alt="PharmaResearch" className="h-16 w-auto object-contain" />
-              <div className="h-12 w-[3px] bg-slate-700/60 rounded-full"></div>
+          <div className="p-8 z-20 border-b border-slate-800 bg-slate-900/95 backdrop-blur-2xl flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-10">
+              <img src="PharmaResearch-CI3.png" alt="PharmaResearch" className="h-16 w-auto object-contain" />
+              <div className="h-10 w-[2px] bg-slate-700/50 rounded-full"></div>
               <div>
-                <h1 className="text-emerald-400 font-black text-3xl tracking-[0.25em] uppercase leading-none mb-2">Live Board</h1>
-                <span className="text-slate-500 font-bold text-xs uppercase tracking-[0.4em] opacity-80">2026 PharmaResearch Workshop</span>
+                <h1 className="text-emerald-400 font-black text-2xl tracking-[0.1em] uppercase leading-none mb-1">Live Feedback Board</h1>
+                <span className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.3em] opacity-80">Workshop 2026 Session</span>
               </div>
             </div>
-            <div className="flex items-center gap-5 bg-slate-800 px-8 py-4 rounded-full border border-slate-700 shadow-inner">
-               <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_15px_#10b981]"></div>
-               <span className="text-slate-200 text-base font-black uppercase tracking-widest">{comments.length} Feeds</span>
+            <div className="flex items-center gap-4 bg-slate-800 px-6 py-3 rounded-full border border-slate-700">
+               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_#10b981]"></div>
+               <span className="text-slate-200 text-sm font-black uppercase tracking-widest">{comments.length} Messages</span>
             </div>
           </div>
 
-          <div className="flex-1 relative z-10 w-full h-full bg-[radial-gradient(circle_at_center,_#1e293b_0%,_#0f172a_100%)]">
-            {comments.map((c) => {
-              const style = c.style || { rotation: 0, colorIndex: 0, left: 50, top: 50 };
-              const isPunched = likedId === c.id;
-              const hasLiked = c.likedBy && c.likedBy.includes(userId);
+          {/* 겹침 방지 순차 그리드 레이아웃 영역 */}
+          <div className="flex-1 overflow-y-auto p-10 bg-[radial-gradient(circle_at_center,_#1e293b_0%,_#0f172a_100%)]">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8 auto-rows-max">
+              {comments.map((c) => {
+                const style = c.style || { colorIndex: 0 };
+                const isPunched = likedId === c.id;
+                const hasLiked = c.likedBy && c.likedBy.includes(userId);
 
-              if (isPunched && !isMobileScreen) {
-                 setTimeout(() => {
-                   const container = document.getElementById('particles-layer');
-                   if (!container) return;
-                   for(let i=0; i<12; i++) {
-                     const p = document.createElement('div');
-                     p.innerHTML = '💚';
-                     p.className = 'heart-particle';
-                     p.style.left = `${style.left + 10}%`;
-                     p.style.top = `${style.top + 10}%`;
-                     p.style.setProperty('--tx', `${(Math.random()-0.5) * 400}px`);
-                     p.style.setProperty('--ty', `${(Math.random()-0.5) * 400}px`);
-                     p.style.setProperty('--tr', `${Math.random()*720}deg`);
-                     container.appendChild(p);
-                     setTimeout(() => p.remove(), 1200);
-                   }
-                 }, 0);
-              }
-
-              return (
-                <div key={c.id} onDoubleClick={() => toggleLike(c.id)} 
-                  className={`absolute animate-card ${isPunched ? 'animate-punch' : ''} card-shadow p-10 rounded-[3.5rem] flex flex-col justify-between ${colors[style.colorIndex]} hover:z-[60] transition-transform cursor-pointer border border-white/5`}
-                  style={{ '--rotation': `${style.rotation}deg`, left: `${style.left}%`, top: `${style.top}%`, transform: `rotate(${style.rotation}deg)`, width: '345px', minHeight: '190px' }}>
-                  
-                  <p className="text-2xl font-black leading-tight break-words text-slate-900 mb-10 whitespace-pre-wrap tracking-tighter">"{c.content}"</p>
-                  
-                  <div className="flex justify-between items-center pt-6 border-t-2 border-slate-100 mt-auto">
-                    <span className="font-black text-xs text-slate-500 truncate bg-slate-50 px-4 py-2 rounded-full max-w-[140px] border border-slate-100 uppercase tracking-widest">@ {c.nickname}</span>
-                    <button onClick={(e) => { e.stopPropagation(); toggleLike(c.id); }} 
-                      className={`flex items-center gap-3 hover:scale-110 px-7 py-3 rounded-full text-xl font-black transition-all shadow-md ${hasLiked ? 'bg-emerald-500 text-white shadow-emerald-500/40' : 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100'}`}>
-                      {hasLiked ? '💚' : '🤍'} <span>{c.likes}</span>
-                    </button>
+                return (
+                  <div 
+                    key={c.id} 
+                    onDoubleClick={() => toggleLike(c.id)} 
+                    className={`relative animate-card ${isPunched ? 'animate-punch' : ''} card-shadow p-8 rounded-[2.5rem] flex flex-col justify-between ${colors[style.colorIndex]} transition-transform cursor-pointer border border-white/5 min-h-[220px]`}
+                  >
+                    <p className="text-xl font-black leading-tight break-words text-slate-900 mb-8 whitespace-pre-wrap tracking-tighter">"{c.content}"</p>
+                    
+                    <div className="flex justify-between items-center pt-5 border-t-2 border-slate-100 mt-auto">
+                      <span className="font-black text-[11px] text-slate-500 truncate bg-slate-50 px-3 py-1.5 rounded-full max-w-[120px] border border-slate-100 uppercase tracking-widest">@ {c.nickname}</span>
+                      <button onClick={(e) => { e.stopPropagation(); toggleLike(c.id); }} 
+                        className={`flex items-center gap-2 hover:scale-110 px-5 py-2.5 rounded-full text-base font-black transition-all shadow-md ${hasLiked ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>
+                        {hasLiked ? '💚' : '🤍'} <span>{c.likes}</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
             
             {comments.length === 0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-10">
-                <img src="logo.png" className="h-32 mb-10 grayscale invert" alt="logo" />
-                <p className="text-4xl font-black uppercase tracking-[0.6em]">Awaiting opinions...</p>
+              <div className="h-full flex flex-col items-center justify-center pointer-events-none opacity-10">
+                <img src="PharmaResearch-CI3.png" className="h-24 mb-6 grayscale invert" alt="logo" />
+                <p className="text-2xl font-black uppercase tracking-[0.4em]">Waiting for Feed...</p>
               </div>
             )}
           </div>
@@ -431,20 +361,20 @@
       const [pin, setPin] = useState('');
       const [auth, setAuth] = useState(false);
       if (!auth) return (
-        <div className="h-full flex items-center justify-center p-6 bg-slate-900">
-          <div className="bg-slate-800 p-16 rounded-[4.5rem] shadow-2xl text-center w-full max-w-md border border-slate-700">
-            <h1 className="text-2xl font-black mb-12 uppercase tracking-[0.3em] text-emerald-400">Admin Control</h1>
-            <input type="password" placeholder="PIN" value={pin} onChange={e=>setPin(e.target.value)} className="w-full p-6 bg-slate-900 border-2 border-slate-700 rounded-3xl text-center text-4xl tracking-[0.6em] mb-10 text-white outline-none focus:border-emerald-500 transition-all" />
-            <button onClick={() => pin === ADMIN_PIN ? setAuth(true) : alert('비밀번호가 틀렸습니다.')} className="w-full bg-emerald-500 text-white p-6 rounded-3xl font-black text-xl hover:bg-emerald-400 transition-all shadow-xl shadow-emerald-900/30 uppercase">Login</button>
+        <div className="h-full flex items-center justify-center p-6 bg-slate-900 shrink-0">
+          <div className="bg-slate-800 p-12 rounded-[4rem] shadow-2xl text-center w-full max-w-sm border border-slate-700">
+            <h1 className="text-xl font-black mb-8 uppercase tracking-widest text-emerald-400">Admin</h1>
+            <input type="password" placeholder="PIN" value={pin} onChange={e=>setPin(e.target.value)} className="w-full p-4 bg-slate-900 border border-slate-700 rounded-3xl text-center text-3xl tracking-[0.5em] mb-6 text-white outline-none focus:border-emerald-500" />
+            <button onClick={() => pin === ADMIN_PIN ? setAuth(true) : alert('틀림')} className="w-full bg-emerald-500 text-white p-4 rounded-3xl font-black text-lg">LOG IN</button>
           </div>
         </div>
       );
       return (
-        <div className="h-full flex items-center justify-center p-6 bg-slate-900 text-center">
-          <div className="max-w-md w-full bg-slate-800 p-16 rounded-[4.5rem] shadow-2xl border border-slate-700">
-            <h1 className="text-3xl font-black mb-12 uppercase tracking-widest text-white border-b border-slate-700 pb-8">System Manager</h1>
-            <button onClick={clearComments} className="w-full p-8 bg-rose-600 text-white font-black rounded-3xl shadow-2xl shadow-rose-900/40 active:scale-95 transition-all text-xl mb-6 uppercase tracking-widest">Clear All Data</button>
-            <p className="text-sm text-slate-500 font-bold uppercase tracking-widest opacity-50">This will close all active Github Issues</p>
+        <div className="h-full flex items-center justify-center p-6 bg-slate-900 text-center shrink-0">
+          <div className="max-w-sm w-full bg-slate-800 p-12 rounded-[4rem] shadow-2xl border border-slate-700">
+            <h1 className="text-2xl font-black mb-10 uppercase tracking-widest text-white border-b border-slate-700 pb-6">Controls</h1>
+            <button onClick={clearComments} className="w-full p-6 bg-rose-600 text-white font-black rounded-3xl shadow-xl active:scale-95 transition-all text-lg mb-4">RESET DATABASE</button>
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">Github Issues will be closed</p>
           </div>
         </div>
       );
