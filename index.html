@@ -122,7 +122,8 @@
       const loadComments = useCallback(async () => {
         if(!GITHUB_TOKEN || GITHUB_TOKEN.includes("YOUR_TOKEN")) return;
         try {
-          const issues = await fetchGitHubAPI("/issues?state=open&per_page=50&sort=created&direction=asc");
+          // 최신순 정렬을 위해 direction=desc로 수정 (최신 의견이 상단에 노출됨)
+          const issues = await fetchGitHubAPI("/issues?state=open&per_page=50&sort=created&direction=desc");
           
           // 내 로컬 좋아요 목록 가져오기
           const localLikes = JSON.parse(localStorage.getItem('my_liked_posts') || '[]');
@@ -130,7 +131,7 @@
           setComments(prev => {
             return issues.map((issue) => {
               const issueId = issue.number.toString();
-              // GitHub 리액션 대신 댓글(comments) 개수를 좋아요 수로 사용 (다중 사용자 누적 가능)
+              // GitHub 리액션 대신 댓글(comments) 개수를 좋아요 수로 사용
               let likesCount = issue.comments || 0;
               const existing = prev.find(p => p.id === issueId);
               
@@ -190,7 +191,7 @@
 
         if(!id.startsWith("temp_")) {
           try {
-            // 리액션 API 대신 댓글 생성 API를 사용하여 좋아요 기록 (누적 가능)
+            // 좋아요 기록을 댓글로 처리
             await fetchGitHubAPI(`/issues/${id}/comments`, "POST", {
               body: `Liked by ${userId}`
             });
