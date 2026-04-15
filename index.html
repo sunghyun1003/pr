@@ -32,12 +32,6 @@
       0% { transform: translateY(30px); opacity: 0; }
       100% { transform: translateY(0); opacity: 1; }
     }
-    
-    /* 좋아요 클릭 시 카드 바운스 */
-    @keyframes cardBounce {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.05); }
-    }
 
     /* 하트가 떨어지는 애니메이션 */
     @keyframes heartRain {
@@ -54,7 +48,6 @@
     }
     
     .animate-card { animation: cardSlideUp 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
-    .animate-bounce-custom { animation: cardBounce 0.4s ease-out; }
     .animate-toast { animation: toastSlide 3s ease-in-out forwards; }
     
     .falling-heart {
@@ -259,7 +252,7 @@
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">성함 또는 닉네임</label>
-                <input type="text" placeholder="익명" value={nickname} onChange={e=>setNickname(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 transition-all text-base text-slate-900 font-bold" maxLength={10} />
+                <input type="text" placeholder="미입력시 익명" value={nickname} onChange={e=>setNickname(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 transition-all text-base text-slate-900 font-bold" maxLength={10} />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">내용</label>
@@ -303,8 +296,9 @@
       if (isMobileScreen) {
         return (
           <div className="h-full flex flex-col w-full bg-slate-100">
-            <div className="bg-emerald-600 p-4 shadow-lg text-center flex flex-col items-center shrink-0">
-              <img src="logo.png" className="h-8 mb-1 object-contain brightness-0 invert" alt="logo" />
+            {/* 상단 헤더 슬림화: 로고(좌), 타이틀(우) 배치 */}
+            <div className="bg-emerald-600 p-3 px-5 shadow-lg flex flex-row justify-between items-center shrink-0">
+              <img src="logo.png" className="h-6 object-contain brightness-0 invert" alt="logo" />
               <h2 className="font-black text-white tracking-widest uppercase text-[10px]">Opinion List</h2>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -355,7 +349,7 @@
                   <div 
                     key={c.id} 
                     onDoubleClick={() => toggleLike(c.id)} 
-                    className={`relative animate-card ${isLiked ? 'animate-bounce-custom' : ''} card-shadow p-8 rounded-[2.5rem] flex flex-col justify-between ${colors[style.colorIndex]} transition-all cursor-pointer border border-white/5 min-h-[220px]`}
+                    className={`relative animate-card card-shadow p-8 rounded-[2.5rem] flex flex-col justify-between ${colors[style.colorIndex]} transition-all cursor-pointer border border-white/5 min-h-[220px]`}
                   >
                     {/* 하트비 이펙트 렌더링 */}
                     {isLiked && heartDrops.map(drop => (
