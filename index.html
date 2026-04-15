@@ -16,8 +16,7 @@
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
 
   <style>
-    /* 글로벌 스타일 & 애니메이션 */
-    body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body { font-family: 'Pretendard', -apple-system, sans-serif; }
     
     @keyframes stickIt {
       0% { transform: scale(1.1) rotate(5deg); opacity: 0; filter: blur(2px); }
@@ -26,7 +25,7 @@
     }
     @keyframes likePop {
       0% { transform: scale(1); }
-      50% { transform: scale(1.4); color: #f43f5e; } /* Rose-500 */
+      50% { transform: scale(1.4); color: #f43f5e; } 
       100% { transform: scale(1); }
     }
     @keyframes floatUp {
@@ -40,44 +39,52 @@
   </style>
 </head>
 <body class="bg-slate-900 text-slate-800 m-0 p-0 overflow-hidden h-screen w-screen">
-  <!-- React가 렌더링될 영역 -->
   <div id="root" class="h-full w-full"></div>
 
-  <!-- 메인 React 컴포넌트 로직 -->
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
     // =====================================================================
-    // ⚠️ [필수 수정 사항] ⚠️
-    // 본인의 GitHub 정보로 아래 항목들을 채워넣어야 작동합니다!
+    // GitHub 설정 (실제 토큰이 무효화되었다면 새로 발급받아 입력해주세요)
     // =====================================================================
-    const GITHUB_OWNER = "sunghyun1003"; // 예: "kim-dev"
-    const GITHUB_REPO = "pr";        // 예: "workshop-wall"
-    
-    // 중요: GitHub은 보안을 위해 토큰이 코드에 그대로 올라가는 것을 차단합니다. (Secret Scanning)
-    // 봇의 스캔을 피하기 위해, 발급받으신 토큰을 대략 반으로 나누어서 입력해 주세요.
-    // (예: 토큰이 ghp_1234567890abcdef 라면)
-    const TOKEN_PART_1 = "ghp_khDbGMZTeisRu8qRB";  // 예: "ghp_12345678"
-    const TOKEN_PART_2 = "FTXN4Yi1snyPD1DhrvI"; // 예: "90abcdef"
-    
-    // 이 코드가 실행될 때 두 문자열을 합쳐서 실제 토큰으로 사용합니다.
-    // * 실제 운영시에는 코드를 열어보면 토큰이 노출되는 구조이므로, 
-    //   사내 행사 등 신뢰할 수 있는 분들에게만 QR코드를 공유해 주세요!
+    const GITHUB_OWNER = "sunghyun1003"; 
+    const GITHUB_REPO = "pr";        
+    const TOKEN_PART_1 = "ghp_khDbGMZTeisRu8qRB"; 
+    const TOKEN_PART_2 = "FTXN4Yi1snyPD1DhrvI"; 
     const GITHUB_TOKEN = TOKEN_PART_1 + TOKEN_PART_2; 
     // =====================================================================
 
-    // API 호출 헬퍼 함수
     const fetchGitHubAPI = async (path, method = "GET", body = null) => {
+      // 캐시 방지용 타임스탬프
+      const urlPath = path.includes('?') ? `${path}&t=${Date.now()}` : `${path}?t=${Date.now()}`;
+      const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}${urlPath}`;
+      
       const headers = {
         "Accept": "application/vnd.github.v3+json",
-        "Authorization": `token ${GITHUB_TOKEN}`
+        "Authorization": `Bearer ${GITHUB_TOKEN}` // Bearer 표준 방식으로 변경
       };
+      
       const options = { method, headers };
-      if (body) { options.body = JSON.stringify(body); }
+      if (body) options.body = JSON.stringify(body);
 
-      const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}${path}`, options);
-      if (!response.ok) throw new Error("GitHub API Error");
-      return response.json();
+      try {
+        const response = await fetch(url, options);
+        
+        if (response.status === 401) {
+          throw new Error("토큰이 무효화되었습니다. GitHub에서 새 토큰을 발급받아주세요.");
+        }
+        if (response.status === 403) {
+          throw new Error("API 호출 한도를 초과했거나 권한이 없습니다.");
+        }
+        if (!response.ok) {
+          throw new Error(`API 오류: ${response.status}`);
+        }
+        
+        return await response.json();
+      } catch (err) {
+        // 네트워크 연결 실패 시 에러 재발생
+        throw err;
+      }
     };
 
     function App() {
@@ -85,9 +92,8 @@
       const [comments, setComments] = useState([]);
       const [isMobileScreen, setIsMobileScreen] = useState(window.innerWidth < 768);
       const [userId, setUserId] = useState('');
-      const [isLoading, setIsLoading] = useState(true);
+      const [errorMsg, setErrorMsg] = useState('');
 
-      // 기기 ID 생성 및 화면 리사이즈 감지
       useEffect(() => {
         let storedUserId = localStorage.getItem('workshop_user_id');
         if (!storedUserId) {
@@ -101,26 +107,23 @@
         return () => window.removeEventListener('resize', handleResize);
       }, []);
 
-      // 1. GitHub Issues에서 데이터 불러오기 (Polling 방식)
       const loadComments = useCallback(async () => {
-        if(GITHUB_OWNER === "YOUR_GITHUB_USERNAME") return; // 세팅 안되었으면 패스
+        if(!GITHUB_TOKEN || GITHUB_TOKEN.includes("YOUR_TOKEN")) return;
 
         try {
-          const issues = await fetchGitHubAPI("/issues?state=open&per_page=100");
+          const issues = await fetchGitHubAPI("/issues?state=open&per_page=100&sort=created&direction=desc");
+          setErrorMsg(''); // 성공 시 에러 메시지 초기화
           
-          const formattedComments = await Promise.all(issues.map(async (issue) => {
+          const formattedComments = issues.map((issue) => {
             const likesCount = issue.reactions ? issue.reactions.heart : 0;
-            const content = issue.body || "";
-            const isPaused = issue.labels.some(l => l.name === 'paused'); 
-            
             return {
               id: issue.number.toString(),
               nickname: issue.title || "익명",
-              content: content,
+              content: issue.body || "",
               likes: likesCount,
               likedBy: [], 
             };
-          }));
+          });
 
           setComments(prev => {
             return formattedComments.map(newC => {
@@ -131,10 +134,9 @@
                 return {
                   ...newC,
                   style: {
-                    // 단정한 기업형 디자인을 위해 회전각도 대폭 축소 (-2도 ~ 2도)
                     rotation: Math.random() * 4 - 2, 
                     colorIndex: Math.floor(Math.random() * 5),
-                    scale: 1, // 크기 균일화
+                    scale: 1,
                     left: Math.random() * 70 + 5,
                     top: Math.random() * 60 + 10,
                   }
@@ -143,54 +145,53 @@
             });
           });
         } catch (error) {
-          console.error("데이터 로드 실패:", error);
-        } finally {
-          setIsLoading(false);
+          console.error("데이터 동기화 실패:", error);
+          setErrorMsg(error.message || "연결 오류가 발생했습니다.");
         }
       }, []);
 
-      // 데이터 갱신 주기 단축 (1.5초)
       useEffect(() => {
         loadComments();
-        const interval = setInterval(loadComments, 1500);
+        const intervalTime = activeTab === 'screen' ? 2500 : 10000;
+        const interval = setInterval(loadComments, intervalTime);
         return () => clearInterval(interval);
-      }, [loadComments]);
+      }, [loadComments, activeTab]);
 
 
-      // 2. 새 댓글 작성
       const addComment = async (nickname, content) => {
         const tempId = "temp_" + Date.now();
         const newComment = {
           id: tempId, nickname: nickname || '익명', content, likes: 0, likedBy: [],
           style: { rotation: Math.random() * 4 - 2, colorIndex: Math.floor(Math.random() * 5), scale: 1, left: Math.random() * 70 + 5, top: Math.random() * 60 + 10 }
         };
+        
         setComments(prev => [newComment, ...prev]);
 
-        if(GITHUB_OWNER !== "YOUR_GITHUB_USERNAME") {
-          try {
-            await fetchGitHubAPI("/issues", "POST", {
-              title: nickname || "익명",
-              body: content
-            });
-            loadComments();
-          } catch(e) { alert("글 등록에 실패했습니다. (API 오류)"); }
+        try {
+          await fetchGitHubAPI("/issues", "POST", {
+            title: nickname || "익명",
+            body: content
+          });
+          loadComments();
+        } catch(e) { 
+          alert(e.message || "글 등록에 실패했습니다."); 
+          setComments(prev => prev.filter(c => c.id !== tempId));
         }
       };
 
-      // 3. 좋아요 클릭
       const toggleLike = async (id) => {
         const target = comments.find(c => c.id === id);
         if(!target || target.likedBy.includes(userId)) return;
 
         setComments(prev => prev.map(c => c.id === id ? { ...c, likes: c.likes + 1, likedBy: [...c.likedBy, userId] } : c));
 
-        if(GITHUB_OWNER !== "YOUR_GITHUB_USERNAME" && !id.startsWith("temp_")) {
+        if(!id.startsWith("temp_")) {
           try {
             await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${id}/reactions`, {
               method: "POST",
               headers: {
                 "Accept": "application/vnd.github.squirrel-girl-preview+json", 
-                "Authorization": `token ${GITHUB_TOKEN}`
+                "Authorization": `Bearer ${GITHUB_TOKEN}`
               },
               body: JSON.stringify({ content: "heart" })
             });
@@ -198,26 +199,24 @@
         }
       };
 
-      // 4. 어드민: 전체 삭제
       const clearComments = async () => {
+        if(!confirm("모든 데이터를 초기화하시겠습니까?")) return;
         setComments([]);
-        if(GITHUB_OWNER !== "YOUR_GITHUB_USERNAME") {
-          try {
-             const issues = await fetchGitHubAPI("/issues?state=open");
-             for(const issue of issues) {
-               await fetchGitHubAPI(`/issues/${issue.number}`, "PATCH", { state: "closed" });
-             }
-             alert("전체 삭제 완료");
-          } catch(e) { alert("삭제 실패"); }
-        }
+        try {
+           const issues = await fetchGitHubAPI("/issues?state=open");
+           for(const issue of issues) {
+             await fetchGitHubAPI(`/issues/${issue.number}`, "PATCH", { state: "closed" });
+           }
+           alert("초기화 완료");
+        } catch(e) { alert("삭제 실패: " + e.message); }
       };
 
       return (
         <div className="flex flex-col h-full w-full select-none bg-slate-900">
-          {GITHUB_OWNER === "YOUR_GITHUB_USERNAME" && (
-             <div className="bg-rose-600 text-white p-3 text-center text-sm font-bold z-[100]">
-               ⚠️ 소스 코드(index.html)에서 GITHUB_OWNER, REPO, TOKEN_PART 값을 수정해야 작동합니다!
-             </div>
+          {errorMsg && (
+            <div className="bg-amber-500 text-white p-2 text-center text-xs font-bold z-[100] animate-pulse">
+              ⚠️ {errorMsg}
+            </div>
           )}
 
           <div className="flex-1 overflow-hidden relative bg-slate-50">
@@ -244,7 +243,6 @@
       );
     }
 
-    // --- 참여자 폰 화면 (MobileView) ---
     function MobileView({ addComment }) {
       const [nickname, setNickname] = useState('');
       const [content, setContent] = useState('');
@@ -254,31 +252,28 @@
         e.preventDefault();
         if (!content.trim()) return;
         setIsSubmitting(true);
-        
         addComment(nickname, content);
-        
         setContent('');
         setIsSubmitting(false);
-        alert('라이브 보드로 의견이 성공적으로 전송되었습니다.');
       };
 
       return (
-        <div className="h-full w-full flex flex-col items-center justify-start p-4 md:justify-center bg-slate-50 overflow-y-auto">
-          <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-sm border border-slate-200 mt-4 md:mt-0">
+        <div className="h-full w-full flex flex-col items-center justify-start p-4 bg-slate-50 overflow-y-auto">
+          <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-sm border border-slate-200 mt-4">
             <div className="text-center mb-8 border-b border-slate-100 pb-6">
               <h2 className="text-2xl font-black text-slate-800 mb-2">자유 의견 등록</h2>
-              <p className="text-sm text-slate-500">작성하신 내용은 즉시 메인 화면에 공유됩니다.</p>
+              <p className="text-sm text-slate-500">전광판 화면에 실시간으로 반영됩니다.</p>
             </div>
             <form onSubmit={handleSubmit} className="flex flex-col gap-5">
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">작성자 (선택)</label>
-                <input type="text" placeholder="미입력시 익명으로 등록됩니다" value={nickname} onChange={e=>setNickname(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-shadow text-sm" maxLength={10} />
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1">작성자</label>
+                <input type="text" placeholder="익명" value={nickname} onChange={e=>setNickname(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm" maxLength={10} />
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">의견 내용</label>
-                <textarea placeholder="워크샵에 대한 다양한 의견을 자유롭게 남겨주세요." value={content} onChange={e=>setContent(e.target.value)} className="w-full p-4 h-36 bg-slate-50 border border-slate-200 rounded-xl outline-none resize-none focus:ring-2 focus:ring-emerald-500 transition-shadow text-sm leading-relaxed" required />
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1">의견</label>
+                <textarea placeholder="의견을 남겨주세요." value={content} onChange={e=>setContent(e.target.value)} className="w-full p-4 h-36 bg-slate-50 border border-slate-200 rounded-xl outline-none resize-none focus:ring-2 focus:ring-emerald-500 text-sm leading-relaxed" required />
               </div>
-              <button type="submit" disabled={isSubmitting || !content.trim()} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl mt-2 active:scale-95 transition-all disabled:bg-slate-200 disabled:text-slate-400 shadow-md shadow-emerald-600/20">
+              <button type="submit" disabled={isSubmitting || !content.trim()} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-4 rounded-xl active:scale-95 transition-all disabled:bg-slate-200 shadow-md">
                 {isSubmitting ? '전송 중...' : '보드에 등록하기'}
               </button>
             </form>
@@ -287,9 +282,7 @@
       );
     }
 
-    // --- 전광판/리스트 화면 (ScreenView) ---
     function ScreenView({ comments, toggleLike, isMobileScreen, userId }) {
-      // 기업 느낌에 맞는 깔끔한 화이트/소프트 톤의 카드 스타일 라인업
       const colors = [
         'bg-white border-t-4 border-t-emerald-500 border-x border-b border-slate-200',
         'bg-white border-t-4 border-t-teal-500 border-x border-b border-slate-200',
@@ -298,34 +291,22 @@
         'bg-slate-50 border-t-4 border-t-teal-400 border-x border-b border-slate-200'
       ];
 
-      const handleLikeClick = (id) => {
-         toggleLike(id);
-         if (isMobileScreen) {
-             const heart = document.createElement('div');
-             heart.innerHTML = '💚';
-             heart.style.cssText = 'position:fixed; left:50%; bottom:150px; font-size:40px; animation:floatUp 1s ease-out forwards; z-index:9999; transform:translateX(-50%); pointer-events:none;';
-             document.body.appendChild(heart);
-             setTimeout(() => heart.remove(), 1000);
-         }
-      }
-
       if (isMobileScreen) {
-        // 모바일 리스트 뷰
         return (
           <div className="h-full flex flex-col w-full bg-slate-50">
             <div className="bg-emerald-600 p-4 shadow-sm text-center">
-              <h2 className="font-bold text-white tracking-wide">의견 리스트</h2>
+              <h2 className="font-bold text-white">의견 리스트</h2>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {comments.map(c => {
                  const hasLiked = c.likedBy.includes(userId);
                  return (
-                  <div key={c.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200" onDoubleClick={() => handleLikeClick(c.id)}>
-                    <span className="font-bold text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md mb-3 block w-fit">@ {c.nickname}</span>
-                    <p className="text-slate-800 font-medium leading-relaxed mb-5">{c.content}</p>
+                  <div key={c.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200" onDoubleClick={() => toggleLike(c.id)}>
+                    <span className="font-bold text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md mb-2 block w-fit">@ {c.nickname}</span>
+                    <p className="text-slate-800 font-medium leading-relaxed mb-4">{c.content}</p>
                     <div className="flex justify-between items-center border-t border-slate-100 pt-3">
-                      <span className="text-[11px] text-slate-400 font-medium">더블클릭하여 공감</span>
-                      <button onClick={(e) => { e.stopPropagation(); handleLikeClick(c.id); }} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${hasLiked ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                      <span className="text-[11px] text-slate-400">더블클릭 공감</span>
+                      <button onClick={(e) => { e.stopPropagation(); toggleLike(c.id); }} className={`px-4 py-1.5 rounded-full text-sm font-bold ${hasLiked ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
                         {hasLiked ? '💚' : '🤍'} {c.likes}
                       </button>
                     </div>
@@ -337,7 +318,6 @@
         );
       }
 
-      // PC 전광판 뷰 (기업형 보드)
       return (
         <div className="h-full bg-slate-900 overflow-hidden relative flex flex-col w-full">
           <div className="p-8 z-20 pointer-events-none border-b border-slate-800/50 bg-slate-900/80 backdrop-blur-sm flex justify-between items-center">
@@ -356,63 +336,37 @@
               const hasLiked = c.likedBy.includes(userId);
 
               return (
-                <div key={c.id} onDoubleClick={() => handleLikeClick(c.id)} className={`absolute animate-stick-it shadow-2xl p-6 rounded-xl flex flex-col justify-between ${colorClass} hover:z-50 hover:shadow-emerald-500/20 transition-all cursor-pointer`}
+                <div key={c.id} onDoubleClick={() => toggleLike(c.id)} className={`absolute animate-stick-it shadow-2xl p-6 rounded-xl flex flex-col justify-between ${colorClass} hover:z-50 transition-all cursor-pointer`}
                   style={{ '--rotation': `${style.rotation}deg`, left: `${style.left}%`, top: `${style.top}%`, transform: `scale(${style.scale}) rotate(${style.rotation}deg)`, width: '320px', minHeight: '160px' }}>
                   
                   <p className="text-xl font-bold leading-relaxed break-words relative z-10 mb-6 text-slate-800 whitespace-pre-wrap">"{c.content}"</p>
                   
                   <div className="flex justify-between items-center pt-4 border-t border-slate-200/60 relative z-10 mt-auto">
                     <span className="font-bold text-sm text-slate-500 truncate bg-slate-100 px-2 py-1 rounded-md">@ {c.nickname}</span>
-                    <button onClick={(e) => { e.stopPropagation(); handleLikeClick(c.id); }} className={`flex items-center gap-1.5 hover:scale-105 px-3 py-1.5 rounded-full text-sm font-bold transition-all ${hasLiked ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    <button onClick={(e) => { e.stopPropagation(); toggleLike(c.id); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold ${hasLiked ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
                       {hasLiked ? '💚' : '🤍'} <span>{c.likes}</span>
                     </button>
                   </div>
                 </div>
               );
             })}
-            {comments.length === 0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 pointer-events-none">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-24 w-24 mb-6 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" /></svg>
-                <p className="text-xl font-bold opacity-40 tracking-wide">등록된 의견이 없습니다.</p>
-              </div>
-            )}
           </div>
         </div>
       );
     }
 
-    // --- 관리자 화면 (AdminView) ---
     function AdminView({ clearComments }) {
       const [isAuthenticated, setIsAuthenticated] = useState(false);
       const [pin, setPin] = useState('');
-      const [showConfirm, setShowConfirm] = useState(false);
-
-      const handleLogin = (e) => {
-        e.preventDefault();
-        if (pin === '12345678') { 
-          setIsAuthenticated(true);
-        } else {
-          alert('비밀번호가 일치하지 않습니다.');
-        }
-      };
 
       if (!isAuthenticated) {
         return (
-          <div className="h-full bg-slate-100 p-5 overflow-y-auto w-full flex items-center justify-center">
-            <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-sm border border-slate-200 text-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto mb-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-              <h1 className="text-xl font-black text-slate-800 mb-6">관리자 시스템 로그인</h1>
-              <form onSubmit={handleLogin} className="flex flex-col gap-4">
-                <input 
-                  type="password" 
-                  placeholder="PIN 번호 입력" 
-                  value={pin} 
-                  onChange={e => setPin(e.target.value)} 
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-xl tracking-[0.5em] outline-none focus:ring-2 focus:ring-emerald-500 transition-shadow" 
-                />
-                <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold p-4 rounded-xl active:scale-95 transition-all">
-                  접속 승인
-                </button>
+          <div className="h-full bg-slate-100 p-5 flex items-center justify-center">
+            <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-sm text-center">
+              <h1 className="text-xl font-black text-slate-800 mb-6">관리자 로그인</h1>
+              <form onSubmit={(e) => { e.preventDefault(); if(pin==='12345678') setIsAuthenticated(true); else alert('실패'); }} className="flex flex-col gap-4">
+                <input type="password" placeholder="PIN" value={pin} onChange={e => setPin(e.target.value)} className="w-full p-4 border rounded-xl text-center text-xl tracking-[0.5em]" />
+                <button type="submit" className="w-full bg-slate-800 text-white p-4 rounded-xl">접속</button>
               </form>
             </div>
           </div>
@@ -420,27 +374,10 @@
       }
 
       return (
-        <div className="h-full bg-slate-100 p-5 overflow-y-auto w-full flex flex-col items-center justify-start md:justify-center">
-          <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-sm border border-slate-200 text-center mt-4 md:mt-0">
-            <h1 className="text-2xl font-black text-slate-800 mb-8 border-b border-slate-100 pb-6">제어판</h1>
-            
-            {!showConfirm ? (
-              <button onClick={() => setShowConfirm(true)} className="w-full p-4 bg-rose-50 text-rose-600 font-bold rounded-xl flex items-center justify-center gap-2 border border-rose-200 hover:bg-rose-100 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                데이터 전체 초기화
-              </button>
-            ) : (
-              <div className="bg-rose-50 p-6 rounded-xl border border-rose-200">
-                <p className="text-rose-700 font-bold mb-5">라이브 보드의 모든 의견이 영구 삭제됩니다.<br/>계속하시겠습니까?</p>
-                <div className="flex gap-3">
-                  <button onClick={() => setShowConfirm(false)} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg hover:bg-slate-50 transition-colors">취소</button>
-                  <button onClick={() => { clearComments(); setShowConfirm(false); }} className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-colors">영구 삭제</button>
-                </div>
-              </div>
-            )}
-            <p className="text-xs text-slate-400 mt-6 bg-slate-50 p-4 rounded-lg text-left leading-relaxed">
-              * 초기화를 진행하면 연동된 GitHub 저장소의 모든 Issue 데이터 상태가 강제로 닫힘(Closed) 처리되며 보드에서 보이지 않게 됩니다.
-            </p>
+        <div className="h-full bg-slate-100 p-5 flex items-center justify-center">
+          <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-sm text-center">
+            <h1 className="text-2xl font-black mb-8">제어판</h1>
+            <button onClick={clearComments} className="w-full p-4 bg-rose-600 text-white font-bold rounded-xl shadow-md">데이터 초기화</button>
           </div>
         </div>
       );
