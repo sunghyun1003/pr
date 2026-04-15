@@ -124,18 +124,19 @@
         try {
           const issues = await fetchGitHubAPI("/issues?state=open&per_page=50&sort=created&direction=asc");
           
-          // 내 로컬 좋아요 목록 가져오기 (되돌아감 방지)
+          // 내 로컬 좋아요 목록 가져오기
           const localLikes = JSON.parse(localStorage.getItem('my_liked_posts') || '[]');
 
           setComments(prev => {
             return issues.map((issue) => {
               const issueId = issue.number.toString();
-              let likesCount = issue.reactions ? issue.reactions.heart : 0;
+              // GitHub 리액션 대신 댓글(comments) 개수를 좋아요 수로 사용 (다중 사용자 누적 가능)
+              let likesCount = issue.comments || 0;
               const existing = prev.find(p => p.id === issueId);
               
-              // [보정 로직] 내가 이미 좋아요를 눌렀는데 API 응답값이 아직 예전 값인 경우
+              // 내가 방금 눌렀는데 아직 API에 반영 안 된 경우 보정
               if (localLikes.includes(issueId) && likesCount === 0) {
-                likesCount = 1; // 최소 1로 고정하여 되돌아가는 현상 방지
+                likesCount = 1;
               }
               
               if (existing && likesCount > existing.likes) {
@@ -178,22 +179,22 @@
         const localLikes = JSON.parse(localStorage.getItem('my_liked_posts') || '[]');
         if(localLikes.includes(id)) return; // 이미 누름
         
-        // 로컬 저장소에 먼저 기록 (낙관적 업데이트)
+        // 로컬 저장소 기록
         const updatedLikes = [...localLikes, id];
         localStorage.setItem('my_liked_posts', JSON.stringify(updatedLikes));
 
+        // UI 즉시 업데이트
         setComments(prev => prev.map(c => c.id === id ? { ...c, likes: c.likes + 1, likedBy: [userId] } : c));
         setLikedId(id);
         setTimeout(() => setLikedId(null), 1000);
 
         if(!id.startsWith("temp_")) {
           try {
-            await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${id}/reactions`, {
-              method: "POST",
-              headers: { "Accept": "application/vnd.github.squirrel-girl-preview+json", "Authorization": `Bearer ${GITHUB_TOKEN}` },
-              body: JSON.stringify({ content: "heart" })
+            // 리액션 API 대신 댓글 생성 API를 사용하여 좋아요 기록 (누적 가능)
+            await fetchGitHubAPI(`/issues/${id}/comments`, "POST", {
+              body: `Liked by ${userId}`
             });
-          } catch(e) {}
+          } catch(e) { console.error("좋아요 동기화 실패", e); }
         }
       };
 
@@ -268,7 +269,7 @@
                 <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">내용</label>
                 <textarea placeholder="의견을 입력해 주세요." value={content} onChange={e=>setContent(e.target.value)} className="w-full p-3 h-28 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 transition-all text-base text-slate-900 font-bold leading-relaxed resize-none" required />
               </div>
-              <button type="submit" disabled={isSubmitting || !content.trim()} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black p-4 rounded-2xl active:scale-95 transition-all disabled:bg-slate-200 shadow-lg mt-2 text-base">
+              <button type="submit" disabled={isSubmitting || !content.trim()} className="w-full bg-emerald-500 hover:bg-emerald-700 text-white font-black p-4 rounded-2xl active:scale-95 transition-all disabled:bg-slate-200 shadow-lg mt-2 text-base">
                 {isSubmitting ? '보내는 중...' : '전광판 등록하기'}
               </button>
             </form>
@@ -329,7 +330,6 @@
 
       return (
         <div className="h-full bg-slate-900 overflow-hidden relative flex flex-col w-full">
-          {/* PC 헤더 슬림화: 로고 크기와 패딩 최적화 */}
           <div className="p-4 px-10 z-20 border-b border-slate-800 bg-slate-900/95 backdrop-blur-2xl flex justify-between items-center shrink-0 shadow-2xl">
             <div className="flex items-center gap-10">
               <img src="logo.png" alt="PharmaResearch" className="h-14 w-auto object-contain" />
@@ -359,7 +359,6 @@
                     className="relative animate-card card-shadow p-8 rounded-[2.5rem] flex flex-col justify-between bg-white border-t-[10px] transition-all cursor-pointer border border-white/5 min-h-[220px]"
                     style={{ borderTopColor: colors[style.colorIndex].split('-').pop() === '500' ? '#10b981' : '#14b8a6' }}
                   >
-                    {/* 하트비 이펙트: 깜빡임 없이 하트만 떨어짐 */}
                     {isThisPostLiked && heartDrops.map(drop => (
                       <div 
                         key={drop.id} 
@@ -375,7 +374,7 @@
                     <div className="flex justify-between items-center pt-5 border-t-2 border-slate-100 mt-auto">
                       <span className="font-black text-[11px] text-slate-500 truncate bg-slate-50 px-3 py-1.5 rounded-full max-w-[120px] border border-slate-100 uppercase tracking-widest">@ {c.nickname}</span>
                       <button onClick={(e) => { e.stopPropagation(); toggleLike(c.id); }} 
-                        className={`flex items-center gap-2 hover:scale-110 px-5 py-2 rounded-full text-base font-black transition-all shadow-md ${hasMeLiked ? 'bg-emerald-500 text-white shadow-emerald-500/40' : 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100'}`}>
+                        className={`flex items-center gap-2 hover:scale-110 px-5 py-2.5 rounded-full text-base font-black transition-all shadow-md ${hasMeLiked ? 'bg-emerald-500 text-white shadow-emerald-500/40' : 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100'}`}>
                         {hasMeLiked ? '💚' : '🤍'} <span>{c.likes}</span>
                       </button>
                     </div>
