@@ -155,10 +155,11 @@
         }
       }, []);
 
-      // 3초마다 데이터 갱신
+      // 데이터 갱신 주기 단축 (3000ms -> 1500ms)
       useEffect(() => {
         loadComments();
-        const interval = setInterval(loadComments, 3000);
+        // 1.5초마다 GitHub에 새 데이터가 있는지 확인 (API Rate Limit 주의)
+        const interval = setInterval(loadComments, 1500);
         return () => clearInterval(interval);
       }, [loadComments]);
 
@@ -377,10 +378,10 @@
       const handleLogin = (e) => {
         e.preventDefault();
         // 실제 운영시에는 이 비밀번호를 원하는 숫자로 바꾸시면 됩니다.
-        if (pin === '12345678') { 
+        if (pin === '1234') { 
           setIsAuthenticated(true);
         } else {
-          alert('비밀번호가 틀렸습니다. (힌트: ^^)');
+          alert('비밀번호가 틀렸습니다. (힌트: 1234)');
         }
       };
 
